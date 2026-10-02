@@ -1,0 +1,21 @@
+{
+  "id": 17,
+  "title": "Smart Entryway Usage Analytics",
+  "repository_slug": "smart-entryway-usage-analytics",
+  "category": "Smart Home",
+  "platform": "ESP8266",
+  "platform_family": "arduino",
+  "difficulty": "Intermediate",
+  "estimated_hours": 32,
+  "connectivity": "Matter",
+  "components": [
+    "RGB LED",
+    "BME280",
+    "OLED display"
+  ],
+  "scope": "Build a smart home prototype that uses RGB LED, BME280, OLED display to summarize daily and weekly usage. Include setup instructions, a circuit diagram, tested firmware, and sample output.",
+  "key_deliverable": "Usage Analytics demonstration with repeatable test steps",
+  "mode": "data_logger",
+  "entrypoint": "firmware/smart-entryway-usage-analytics/smart-entryway-usage-analytics.ino",
+  "roadmap_source": "openmaker-2100-project-roadmap.xlsx"
+}
