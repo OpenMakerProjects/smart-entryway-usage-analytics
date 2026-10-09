@@ -5,3 +5,4 @@ __pycache__/
 .idea/
 .pio/
 build/
+firmware/config.private.h

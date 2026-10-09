@@ -1,107 +1,35 @@
 #include <Arduino.h>
-
-#ifndef LED_BUILTIN
-#define LED_BUILTIN 2
-#endif
-
-// Smart Entryway Usage Analytics
-// Roadmap project 17; mode: data_logger
-constexpr uint8_t SENSOR_PINS[] = {A0, A1, A2};
-constexpr size_t SENSOR_COUNT = sizeof(SENSOR_PINS) / sizeof(SENSOR_PINS[0]);
-constexpr uint8_t OUTPUT_PIN = LED_BUILTIN;
-constexpr unsigned long SAMPLE_INTERVAL_MS = 2000UL;
-constexpr float TRIGGER_THRESHOLD = 0.62f;
-constexpr uint8_t REQUIRED_CONFIRMATIONS = 3;
-
-enum class SystemState : uint8_t { Starting, Normal, Active, Fault };
-
-struct Snapshot {
-  float values[SENSOR_COUNT];
-  float score;
-  bool valid;
-};
-
-SystemState state = SystemState::Starting;
-unsigned long lastSampleAt = 0;
-uint8_t confirmations = 0;
-bool outputActive = false;
-
-float normalizeReading(int raw) {
-  return constrain(raw / 1023.0f, 0.0f, 1.0f);
+#include <Wire.h>
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_SSD1306.h>
+#include "../usage.h"
+#include "../config.h"
+WiFiClient wifi;PubSubClient mqtt(wifi);Adafruit_BME280 bme;Adafruit_SSD1306 oled(128,64,&Wire,-1);Usage usage;
+bool sensorReady=false,screen=false,requested=false;uint32_t sampled=0,retry=0;
+void command(char*,byte* data,unsigned n){if(n==2&&!memcmp(data,"ON",2))requested=true;if(n==3&&!memcmp(data,"OFF",3))requested=false;}
+void setup(){
+ pinMode(12,OUTPUT);pinMode(13,OUTPUT);pinMode(14,OUTPUT);analogWriteRange(255);
+ analogWrite(12,0);analogWrite(13,0);analogWrite(14,0);Serial.begin(115200);Wire.begin(4,5);
+ sensorReady=bme.begin(0x76);screen=oled.begin(SSD1306_SWITCHCAPVCC,0x3C);
+ mqtt.setServer(MQTT_HOST,MQTT_PORT);mqtt.setCallback(command);mqtt.setSocketTimeout(1);
+ if(strlen(WIFI_SSID))WiFi.begin(WIFI_SSID,WIFI_PASSWORD);
 }
-
-Snapshot acquireSnapshot() {
-  Snapshot snapshot{};
-  snapshot.valid = true;
-  float sum = 0.0f;
-  for (size_t index = 0; index < SENSOR_COUNT; ++index) {
-    const int raw = analogRead(SENSOR_PINS[index]);
-    if (raw < 0) snapshot.valid = false;
-    snapshot.values[index] = normalizeReading(raw);
-    sum += snapshot.values[index];
-  }
-  snapshot.score = sum / SENSOR_COUNT;
-  return snapshot;
-}
-
-bool decide(const Snapshot &snapshot) {
-  if (!snapshot.valid) return false;
-  const bool condition = snapshot.score >= TRIGGER_THRESHOLD;
-  if (!condition) {
-    confirmations = 0;
-  } else if (confirmations < REQUIRED_CONFIRMATIONS) {
-    confirmations += 1;
-  }
-  return confirmations >= REQUIRED_CONFIRMATIONS;
-}
-
-void applyOutput(bool requested, bool valid) {
-  if (!valid) {
-    outputActive = false;
-    state = SystemState::Fault;
-  } else {
-    outputActive = requested;
-    state = requested ? SystemState::Active : SystemState::Normal;
-  }
-  digitalWrite(OUTPUT_PIN, outputActive ? HIGH : LOW);
-}
-
-const char *stateName() {
-  switch (state) {
-    case SystemState::Starting: return "starting";
-    case SystemState::Normal: return "normal";
-    case SystemState::Active: return "active";
-    default: return "fault";
-  }
-}
-
-void publishTelemetry(const Snapshot &snapshot) {
-  Serial.print(R"json({"project_id":17,"mode":"data_logger","state":")json");
-  Serial.print(stateName());
-  Serial.print(R"json(","score":)json");
-  Serial.print(snapshot.score, 3);
-  Serial.print(R"json(,"output":)json");
-  Serial.print(outputActive ? "true" : "false");
-  Serial.print(R"json(,"values":[)json");
-  for (size_t index = 0; index < SENSOR_COUNT; ++index) {
-    if (index) Serial.print(',');
-    Serial.print(snapshot.values[index], 3);
-  }
-  Serial.println("]}");
-}
-
-void setup() {
-  pinMode(OUTPUT_PIN, OUTPUT);
-  digitalWrite(OUTPUT_PIN, LOW);
-  Serial.begin(115200);
-  state = SystemState::Normal;
-}
-
-void loop() {
-  const unsigned long now = millis();
-  if (now - lastSampleAt < SAMPLE_INTERVAL_MS) return;
-  lastSampleAt = now;
-  const Snapshot snapshot = acquireSnapshot();
-  applyOutput(decide(snapshot), snapshot.valid);
-  publishTelemetry(snapshot);
+void loop(){
+ uint32_t now=millis();static char line[8];static unsigned count=0;static bool overflow=false;
+ while(Serial.available()){char c=Serial.read();if(c=='\n'){if(!overflow)command(nullptr,(byte*)line,count);count=0;overflow=false;}else if(c!='\r'){if(count<sizeof(line))line[count++]=c;else overflow=true;}}
+ if(strlen(MQTT_HOST)&&WiFi.status()==WL_CONNECTED&&!mqtt.connected()&&uint32_t(now-retry)>=10000){
+  retry=now;String cid="entry17-"+String(ESP.getChipId(),HEX);bool ok=strlen(MQTT_USER)?mqtt.connect(cid.c_str(),MQTT_USER,MQTT_PASSWORD,"entry17/status",0,true,"offline"):mqtt.connect(cid.c_str(),"entry17/status",0,true,"offline");
+  if(ok){mqtt.subscribe("entry17/command");mqtt.publish("entry17/status","online",true);}
+ }mqtt.loop();
+ if(uint32_t(now-sampled)<1000){delay(1);return;}sampled=now;
+ Wire.beginTransmission(0x76);bool ack=Wire.endTransmission()==0;if(!sensorReady&&ack)sensorReady=bme.begin(0x76);
+ float t=sensorReady&&ack?bme.readTemperature():NAN,h=sensorReady&&ack?bme.readHumidity():NAN;
+ bool valid=ack&&isfinite(t)&&isfinite(h)&&t>=-40&&t<=85&&h>=0&&h<=100,active=requested&&valid;usage.tick(now,active);
+ analogWrite(12,active&&h>=70?180:0);analogWrite(13,active&&h<70&&t>=15?120:0);analogWrite(14,active&&h<70&&t<15?120:0);
+ if(screen){oled.clearDisplay();oled.setTextSize(1);oled.setTextColor(SSD1306_WHITE);oled.setCursor(0,0);if(valid){oled.print("T ");oled.print(t,1);oled.print("C RH ");oled.print(h,0);oled.println("%");}else oled.println("SENSOR FAULT");
+  oled.print("Requested ");oled.println(requested?"ON":"OFF");oled.print("Actual ");oled.println(active?"ON":"OFF");oled.print("Day min ");oled.println(usage.currentDay()/60000);oled.print("7 slots min ");oled.println((unsigned long)(usage.weekTotal()/60000));oled.display();}
+ char out[340];snprintf(out,sizeof(out),"{\"id\":17,\"uptime_s\":%lu,\"valid\":%s,\"temperature_c\":%.1f,\"humidity_pct\":%.1f,\"requested\":%s,\"active\":%s,\"hour_ms\":%lu,\"day_ms\":%lu,\"slots24_ms\":%lu,\"slots7day_ms\":%lu}",(unsigned long)(usage.elapsed/1000),valid?"true":"false",valid?t:0,valid?h:0,requested?"true":"false",active?"true":"false",(unsigned long)usage.currentHour(),(unsigned long)usage.currentDay(),(unsigned long)usage.hoursTotal(),(unsigned long)usage.weekTotal());Serial.println(out);
+ if(mqtt.connected()){mqtt.publish("entry17/state",out,true);mqtt.publish("entry17/switch/state",requested?"ON":"OFF",true);}
 }

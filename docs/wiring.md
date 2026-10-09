@@ -1,17 +1,3 @@
-# Wiring guide
+# Wiring
 
-This is a low-voltage prototype wiring plan for **Smart Entryway Usage Analytics**. Confirm every module's datasheet because breakout-board pinouts vary.
-
-| Component | Suggested pin | Role | Check |
-| --- | --- | --- | --- |
-| RGB LED | 10 | Digital I/O | Confirm the module voltage and pinout before power-up. |
-| BME280 | 2 | Digital I/O | Confirm the module voltage and pinout before power-up. |
-| OLED display | 3 | Digital I/O | Confirm the module voltage and pinout before power-up. |
-| Status output | LED_BUILTIN | Output | Use a resistor when an external LED is fitted. |
-
-## Power
-
-- Use a regulated supply sized for the selected modules.
-- Join grounds unless an interface is explicitly isolated.
-- Do not connect mains voltage directly to a development board.
-- Add a fuse, emergency stop, and certified isolation where a real actuator can create risk.
+NodeMCU D2/GPIO4 SDA and D1/GPIO5 SCL connect both BME2800x76 and OLED0x3C; VCC and pullups3.3V, GND common. BME CSB3.3V/SDO GND. RGB common cathodeGND; D6/GPIO12 red, D7/GPIO13 green, D5/GPIO14 blue each through330Ω. USB powers controller. [Circuit](circuit-diagram.svg).
