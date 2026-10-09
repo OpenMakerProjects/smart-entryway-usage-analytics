@@ -1,0 +1,31 @@
+# Merge with your existing MQTT configuration; configure broker through HA UI.
+mqtt:
+  switch:
+    - name: Entryway17 Indicator
+      unique_id: entryway17_indicator
+      command_topic: entry17/command
+      state_topic: entry17/switch/state
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        - topic: entry17/status
+  sensor:
+    - name: Entryway17 Temperature
+      unique_id: entryway17_temperature
+      state_topic: entry17/state
+      value_template: "{{ value_json.temperature_c if value_json.valid else none }}"
+      device_class: temperature
+      unit_of_measurement: "°C"
+      state_class: measurement
+    - name: Entryway17 Humidity
+      unique_id: entryway17_humidity
+      state_topic: entry17/state
+      value_template: "{{ value_json.humidity_pct if value_json.valid else none }}"
+      device_class: humidity
+      unit_of_measurement: "%"
+      state_class: measurement
+    - name: Entryway17 Day Enabled Minutes
+      unique_id: entryway17_day_minutes
+      state_topic: entry17/state
+      value_template: "{{ (value_json.day_ms / 60000) | round(2) }}"
+      unit_of_measurement: min
