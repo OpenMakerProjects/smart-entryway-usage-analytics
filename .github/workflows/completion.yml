@@ -11,6 +11,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: |
+          pip install PyYAML==6.0.2
+          python -c "import yaml; yaml.safe_load(open('config/home-assistant.yaml'))"
           python tools/validate.py
           g++ -std=c++17 tests/usage_test.cpp -o /tmp/alerts
           /tmp/alerts

@@ -13,7 +13,7 @@ void setup(){
  pinMode(12,OUTPUT);pinMode(13,OUTPUT);pinMode(14,OUTPUT);analogWriteRange(255);
  analogWrite(12,0);analogWrite(13,0);analogWrite(14,0);Serial.begin(115200);Wire.begin(4,5);
  sensorReady=bme.begin(0x76);screen=oled.begin(SSD1306_SWITCHCAPVCC,0x3C);
- mqtt.setServer(MQTT_HOST,MQTT_PORT);mqtt.setCallback(command);mqtt.setSocketTimeout(1);
+ mqtt.setBufferSize(512);mqtt.setServer(MQTT_HOST,MQTT_PORT);mqtt.setCallback(command);mqtt.setSocketTimeout(1);
  if(strlen(WIFI_SSID))WiFi.begin(WIFI_SSID,WIFI_PASSWORD);
 }
 void loop(){
